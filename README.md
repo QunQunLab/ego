@@ -1,0 +1,2 @@
+# ego
+ easy with go
