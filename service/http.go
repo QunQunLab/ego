@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QunQunLab/ego/conf"
 	"github.com/QunQunLab/ego/log"
@@ -89,6 +90,7 @@ func (s *HttpService) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	c.ResponseWriter = w
 	c.Request = req
+	c.S = time.Now()
 
 	s.handleHTTPRequest(c)
 }
@@ -145,24 +147,22 @@ func (s *HttpService) handleHTTPRequest(ctx *Context) {
 
 		defer func() {
 			if err := recover(); err != nil {
-				execController.RenderError(ctx)
+				execController.RenderError(err)
 			}
 		}()
+
+		ctx.ReqMethod = c.pattern
 
 		// 1.0 prepare
 		execController.Prepare(ctx)
 
-		// todo
 		// 1.1 before start execute logical
-		execController.BeforeStart()
+		execController.BeforeProcess()
 
 		// 2.0 controller method
 		method := vc.MethodByName(c.method)
 		in := make([]reflect.Value, 0)
 		method.Call(in)
-
-		// 3.0 render
-		execController.Render()
 	}
 }
 
