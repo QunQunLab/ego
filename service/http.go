@@ -15,6 +15,10 @@ import (
 	"github.com/QunQunLab/ego/log"
 )
 
+const (
+	EGOVersion = "EGO 0.0.1"
+)
+
 var (
 	default404Body = []byte("404 page not found")
 	default405Body = []byte("405 method not allowed")
@@ -73,7 +77,7 @@ func (s *HttpService) Start() error {
 		port = 8080
 	}
 	address := fmt.Sprintf(":%d", port)
-	log.Trace("Listening and serving HTTP on %s", address)
+	log.Info("Listening and serving HTTP on %s", address)
 	l, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -81,6 +85,10 @@ func (s *HttpService) Start() error {
 	go http.Serve(l, s)
 
 	return nil
+}
+
+func (s *HttpService) RunMode() string {
+	return HttpMode
 }
 
 // ServeHTTP conforms to the http.Handler interface.
@@ -107,14 +115,13 @@ func (s *HttpService) handleHTTPRequest(ctx *Context) {
 				return
 			}
 
-			// todo
 			log.Error("handleHTTPRequest err:%v", errMsg)
 			http.Error(ctx.ResponseWriter, errMsg, http.StatusInternalServerError)
 		}
 	}()
 
 	// cors domain setting
-	ctx.ResponseWriter.Header().Set("Server", "EGO")
+	ctx.ResponseWriter.Header().Set("Server", EGOVersion)
 	if ref := ctx.Request.Referer(); ref != "" {
 		if u, err := url.Parse(ref); nil == err {
 			corsDomain := conf.GetKey("cors_domain")

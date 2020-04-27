@@ -1,50 +1,86 @@
 package log
 
 import (
+	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"strings"
+
+	"github.com/QunQunLab/ego/conf"
+	"github.com/zerak/log"
+	"github.com/zerak/log/provider"
 )
 
-//// Logger log interface
-//type Logger interface {
-//	Trace(format string, arg ...interface{})
-//	Info(format string, arg ...interface{})
-//	Debug(format string, arg ...interface{})
-//	Warn(format string, arg ...interface{})
-//	Error(format string, arg ...interface{})
-//	Fatal(format string, arg ...interface{})
-//}
+type LogOption struct {
+	Dir         string `json:"dir,omitempty"`          // log directory(default: .)
+	Filename    string `json:"filename,omitempty"`     // log filename(default: <appName>.log)
+	NoSymlink   bool   `json:"nosymlink,omitempty"`    // doesn't create symlink to latest log file(default: false)
+	MaxSize     int    `json:"maxsize,omitempty"`      // max bytes number of every log file(default: 64M)
+	DailyAppend bool   `json:"daily_append,omitempty"` // append to existed file instead of creating a new file(default: true)
+	Suffix      string `json:"suffix,omitempty"`       // filename suffix
+	DateFormat  string `json:"date_format,omitempty"`  // date format string(default: %04d%02d%02d)
+	Level       string `json:"level,omitempty"`        //level, 0:fatal 1:error 2:warn 3:info 4:debug 5:trace
+}
 
-var glog = &log.Logger{}
+func Init(opts ...LogOption) error {
 
-func Init() {
-	glog = log.New(os.Stderr, "", log.LstdFlags)
+	if len(opts) > 0 {
+		mfOpts, _ := json.Marshal(opts[0])
+		consoleOpts := fmt.Sprintf(`{"tostderrlevel":%d}`, opts[0].Level)
+		p := provider.NewMixProvider(provider.NewFile(string(mfOpts)), provider.NewColoredConsole(consoleOpts))
+		log.InitWithProvider(p)
+		log.SetLevelFromString(opts[0].Level)
+	} else {
+		var (
+			rootDir  = "./log"
+			filename = "app"
+			level    = "debug"
+		)
+		l := conf.Get("log")
+		if l != nil {
+			rootDir, _ = l.String("root", "./log")
+			filename, _ = l.String("name", "app")
+			level, _ = l.String("level")
+		}
+		mfOpts, _ := json.Marshal(&LogOption{
+			Dir:      rootDir,
+			Filename: filename,
+			MaxSize:  1 << 28,
+			Level:    level,
+		})
+		consoleOpts := fmt.Sprintf(`{"tostderrlevel":%s}`, level)
+		p := provider.NewMixProvider(provider.NewFile(string(mfOpts)), provider.NewColoredConsole(consoleOpts))
+		log.InitWithProvider(p)
+		log.SetLevelFromString(level)
+	}
+	return nil
+}
+
+func Uninit(err error) {
+	log.Uninit(err)
 }
 
 func Trace(format interface{}, arg ...interface{}) {
-	glog.Printf(formatLog(format, arg...))
+	log.Trace(formatLog(format, arg...))
 }
 
 func Info(format interface{}, arg ...interface{}) {
-	glog.Printf(formatLog(format, arg...))
+	log.Info(formatLog(format, arg...))
 }
 
 func Debug(format interface{}, arg ...interface{}) {
-	glog.Printf(formatLog(format, arg...))
+	log.Debug(formatLog(format, arg...))
 }
 
 func Warn(format interface{}, arg ...interface{}) {
-	glog.Printf(formatLog(format, arg...))
+	log.Warn(formatLog(format, arg...))
 }
 
 func Error(format interface{}, arg ...interface{}) {
-	glog.Printf(formatLog(format, arg...))
+	log.Error(formatLog(format, arg...))
 }
 
 func Fatal(format interface{}, arg ...interface{}) {
-	glog.Fatal(formatLog(format, arg...))
+	log.Fatal(formatLog(format, arg...))
 }
 
 func formatLog(f interface{}, v ...interface{}) string {
@@ -69,4 +105,13 @@ func formatLog(f interface{}, v ...interface{}) string {
 		msg += strings.Repeat(" %v", len(v))
 	}
 	return fmt.Sprintf(msg, v...)
+}
+
+// If returns an `IfLogger`
+func If(ok bool) log.IfLogger {
+	if ok {
+		return log.IfLogger(0xFF)
+	} else {
+		return log.IfLogger(0x00)
+	}
 }

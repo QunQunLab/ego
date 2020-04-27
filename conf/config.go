@@ -52,46 +52,61 @@ func (e *NoKeyError) Error() string {
 }
 
 // String get config string value.
-func (s *Section) String(key string) (string, error) {
+func (s *Section) String(key string, defVal ...string) (string, error) {
 	if v, ok := s.val[key]; ok {
 		return v, nil
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return "", &NoKeyError{Key: key, Section: s.sector}
 	}
 }
 
 // Strings get config []string value.
-func (s *Section) Strings(key string) ([]string, error) {
+func (s *Section) Strings(key string, defVal ...[]string) ([]string, error) {
 	if v, ok := s.val[key]; ok {
 		return strings.Split(v, s.delimit), nil
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return nil, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
 
 // Int get config int value.
-func (s *Section) Int(key string) (int64, error) {
+func (s *Section) Int(key string, defVal ...int64) (int64, error) {
 	if v, ok := s.val[key]; ok {
 		return strconv.ParseInt(v, 10, 64)
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return 0, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
 
 // Uint get config uint value.
-func (s *Section) Uint(key string) (uint64, error) {
+func (s *Section) Uint(key string, defVal ...uint64) (uint64, error) {
 	if v, ok := s.val[key]; ok {
 		return strconv.ParseUint(v, 10, 64)
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return 0, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
 
 // Float get config float value.
-func (s *Section) Float(key string) (float64, error) {
+func (s *Section) Float(key string, defVal ...float64) (float64, error) {
 	if v, ok := s.val[key]; ok {
 		return strconv.ParseFloat(v, 64)
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return 0, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
@@ -100,10 +115,13 @@ func (s *Section) Float(key string) (float64, error) {
 // "yes", "1", "y", "true", "enable" means true.
 // "no", "0", "n", "false", "disable" means false.
 // if the specified value unknown then return false.
-func (s *Section) Bool(key string) (bool, error) {
+func (s *Section) Bool(key string, defVal ...bool) (bool, error) {
 	if v, ok := s.val[key]; ok {
 		return parseBool(strings.ToLower(v)), nil
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return false, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
@@ -112,10 +130,13 @@ func (s *Section) Bool(key string) (bool, error) {
 // 1kb = 1k = 1024.
 // 1mb = 1m = 1024 * 1024.
 // 1gb = 1g = 1024 * 1024 * 1024.
-func (s *Section) MemSize(key string) (int, error) {
+func (s *Section) MemSize(key string, defVal ...int) (int, error) {
 	if v, ok := s.val[key]; ok {
 		return parseMemory(v)
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return 0, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
@@ -124,7 +145,7 @@ func (s *Section) MemSize(key string) (int, error) {
 // 1s = 1sec = 1.
 // 1m = 1min = 60.
 // 1h = 1hour = 60 * 60.
-func (s *Section) Duration(key string) (time.Duration, error) {
+func (s *Section) Duration(key string, defVal ...time.Duration) (time.Duration, error) {
 	if v, ok := s.val[key]; ok {
 		if t, err := parseTime(v); err != nil {
 			return 0, err
@@ -132,6 +153,9 @@ func (s *Section) Duration(key string) (time.Duration, error) {
 			return time.Duration(t), nil
 		}
 	} else {
+		if len(defVal) > 0 {
+			return defVal[0], &NoKeyError{Key: key, Section: s.sector}
+		}
 		return 0, &NoKeyError{Key: key, Section: s.sector}
 	}
 }
@@ -732,7 +756,7 @@ func getValue(t, v string) (reflect.Value, error) {
 		}
 		vv = reflect.ValueOf(float64(d))
 	case "string":
-		vv = reflect.ValueOf(v)
+		vv = reflect.ValueOf(strings.Trim(v, " "))
 	default:
 		return vv, errors.New(fmt.Sprintf("unkown type: %s", t))
 	}

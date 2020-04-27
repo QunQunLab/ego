@@ -7,6 +7,12 @@ import (
 	"github.com/QunQunLab/ego/log"
 )
 
+const (
+	HttpMode = "http"
+	RPCMode  = "rpc"
+	CliMode  = "cli"
+)
+
 // Service service interface
 type Service interface {
 	// Name the name of the service
@@ -24,6 +30,9 @@ type Service interface {
 	// Stop wait for all job done
 	// then call sync.WaitGroup.Done
 	Stop(*sync.WaitGroup)
+
+	// RunMode service run mode http/rpc/cli
+	RunMode() string
 }
 
 // Run start services

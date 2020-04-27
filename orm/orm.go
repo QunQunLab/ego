@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"sync"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/go-xorm/xorm"
-
 	"github.com/QunQunLab/ego/conf"
 	"github.com/QunQunLab/ego/log"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-xorm/xorm"
 )
 
 var (
@@ -46,14 +45,14 @@ func getEngine(mysqlConf string) *xorm.Engine {
 		master := masterOption{}
 		err := conf.Unmarshal(&master)
 		if err != nil {
-			panic(err)
+			log.Error("%v unmarshal err:%v", mysqlConf, err)
 		}
 		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 		mds := fmt.Sprintf("%v:%v@tcp(%v)/%v?charset=%v", master.User, master.Password, master.Host, master.Database, master.Charset)
-		log.Trace("master data source:%v", mds)
+		log.Trace("%v source:%v", mysqlConf, mds)
 		me, err := xorm.NewEngine("mysql", mds)
 		if err != nil {
-			log.Fatal("new master engine err:%v", err)
+			log.Error("new %v engine err:%v", mysqlConf, err)
 		}
 		if master.MaxIdleConns > 0 {
 			me.SetMaxIdleConns(master.MaxIdleConns)
@@ -72,10 +71,10 @@ func getEngine(mysqlConf string) *xorm.Engine {
 			panic(err)
 		}
 		sds := fmt.Sprintf("%v:%v@tcp(%v)/%v?charset=%v", slave.User, slave.Password, slave.Host, slave.Database, slave.Charset)
-		log.Trace("slave data source:%v", sds)
+		log.Trace("%v source:%v", mysqlConf, sds)
 		se, err := xorm.NewEngine("mysql", sds)
 		if err != nil {
-			log.Fatal("new slave engine err:%v", err)
+			log.Fatal("new %v engine err:%v", mysqlConf, err)
 		}
 		if slave.MaxIdleConns > 0 {
 			se.SetMaxIdleConns(slave.MaxIdleConns)
@@ -129,10 +128,10 @@ func Engine(c ...string) *xorm.EngineGroup {
 	key := hex.EncodeToString(h.Sum(nil))
 
 	if val, ok := engines[key]; ok {
-		log.Trace("get engine key:%v", key)
+		log.Trace("get orm engine:%v", key)
 		return val
 	} else {
-		log.Trace("new engine key:%v", key)
+		log.Trace("new orm engine:%v", key)
 		master := getEngine(m)
 
 		// slaves

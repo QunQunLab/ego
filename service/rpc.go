@@ -37,8 +37,12 @@ func (s *RpcService) Start() error {
 		port = 8081
 	}
 	address := fmt.Sprintf(":%d", port)
-	log.Trace("Listening and serving RPC on %s", address)
+	log.Info("Listening and serving RPC on %s", address)
 	return nil
+}
+
+func (s *RpcService) RunMode() string {
+	return RPCMode
 }
 
 // Stop wait for all job done

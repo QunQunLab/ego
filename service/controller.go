@@ -45,38 +45,31 @@ type ControllerInterface interface {
 }
 
 type Controller struct {
-	Ctx *Context
-
-	RW http.ResponseWriter
-	R  *http.Request
-
+	Ctx   *Context
 	RWrap *RequestWrap
 }
 
 func (c *Controller) Prepare(ctx *Context) {
 	c.Ctx = ctx
 	c.Ctx.S = time.Now()
-	c.RW = ctx.ResponseWriter
-	c.R = ctx.Request
-	c.R.ParseMultipartForm(32 << 20) //32M
+	c.Ctx.ResponseWriter = ctx.ResponseWriter
+	c.Ctx.Request = ctx.Request
+	c.Ctx.Request.ParseMultipartForm(32 << 20) //32M
 
 	c.RWrap = &RequestWrap{ctx.Request.Form}
 }
 
 func (c *Controller) BeforeProcess() {
-	fmt.Println("controller before start")
 }
 
 func (c *Controller) Render(...interface{}) {
-	fmt.Println("controller render")
 }
 
 func (c *Controller) RenderError(interface{}) {
-	fmt.Println("controller render error")
 }
 
 func (c *Controller) GetCookie(key string) string {
-	cookie, err := c.R.Cookie(key)
+	cookie, err := c.Ctx.Request.Cookie(key)
 	if err == nil {
 		return cookie.Value
 	}
@@ -84,7 +77,7 @@ func (c *Controller) GetCookie(key string) string {
 }
 
 func (c *Controller) GetHeader(key string) string {
-	return c.R.Header.Get(key)
+	return c.Ctx.Request.Header.Get(key)
 }
 
 func (c *Controller) _getFormValue(key string) string {
@@ -215,11 +208,11 @@ func (c *Controller) GetFromJson(key string) interface{} {
 }
 
 func (c *Controller) GetFile(key string) (multipart.File, *multipart.FileHeader, error) {
-	return c.R.FormFile(key)
+	return c.Ctx.Request.FormFile(key)
 }
 
 func (c *Controller) GetIp() string {
-	r := c.R
+	r := c.Ctx.Request
 
 	ip := r.Header.Get("X-Forwarded-For")
 	if ip == "" || ip == "127.0.0.1" {
@@ -248,16 +241,16 @@ func (c *Controller) GetIp() string {
 }
 
 func (c *Controller) GetRequestUri() string {
-	if nil != c.R {
-		return fmt.Sprint(c.R.URL)
+	if nil != c.Ctx.Request {
+		return fmt.Sprint(c.Ctx.Request.URL)
 	}
 
 	return ""
 }
 
 func (c *Controller) GetUA() string {
-	if nil != c.R {
-		return c.R.UserAgent()
+	if nil != c.Ctx.Request {
+		return c.Ctx.Request.UserAgent()
 	}
 	return ""
 }
@@ -271,7 +264,7 @@ func (c *Controller) SetCookie(key, val string, lifetime int) {
 		MaxAge:   lifetime,
 		Expires:  time.Now().Add(time.Second * time.Duration(lifetime)),
 	}
-	http.SetCookie(c.RW, cookie)
+	http.SetCookie(c.Ctx.ResponseWriter, cookie)
 }
 
 func (c *Controller) UnsetCookie(key string) {
@@ -283,15 +276,15 @@ func (c *Controller) UnsetCookie(key string) {
 		MaxAge:   0,
 		Expires:  time.Now().AddDate(-1, 0, 0),
 	}
-	http.SetCookie(c.RW, cookie)
+	http.SetCookie(c.Ctx.ResponseWriter, cookie)
 }
 
 func (c *Controller) SetHeader(key, val string) {
-	c.RW.Header().Set(key, val)
+	c.Ctx.ResponseWriter.Header().Set(key, val)
 }
 
 func (c *Controller) SetHeaders(headers http.Header) {
-	hs := c.RW.Header()
+	hs := c.Ctx.ResponseWriter.Header()
 	for k, v := range headers {
 		hs.Set(k, v[0])
 	}

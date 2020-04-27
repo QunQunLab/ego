@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/satori/go.uuid"
+
+	"github.com/QunQunLab/ego/log"
 )
 
 const (
@@ -23,12 +25,16 @@ type Message struct {
 	Body      []byte `json:"body"`
 	Timestamp int64  `json:"timestamp"`
 	DelayTime int64  `json:"delayTime"`
-	_         struct{}
+}
+
+func (m Message) String() string {
+	return fmt.Sprintf("ID:%v body:[%v] t:%v dt:%v", m.ID, string(m.Body), m.Timestamp, m.DelayTime)
 }
 
 func NewMessage(id string, body []byte) *Message {
 	if id == "" {
-		id = uuid.NewV4().String()
+		guid, _ := uuid.NewV4()
+		id = guid.String()
 	}
 	return &Message{
 		ID:        id,
@@ -39,7 +45,7 @@ func NewMessage(id string, body []byte) *Message {
 }
 
 type Handler interface {
-	HandleMessage(msg *Message)
+	HandleMessage(msg *Message) error
 }
 
 type consumer struct {
@@ -54,129 +60,138 @@ type consumer struct {
 
 type ConsumerOptions struct {
 	RateLimitPeriod time.Duration
-	UseBLPop        bool
-}
-
-type ConsumerOption func(options *ConsumerOptions)
-
-func NewRateLimitPeriod(d time.Duration) ConsumerOption {
-	return func(o *ConsumerOptions) {
-		o.RateLimitPeriod = d
-	}
-}
-
-func UseBLPop(u bool) ConsumerOption {
-	return func(o *ConsumerOptions) {
-		o.UseBLPop = u
-	}
 }
 
 type Consumer = *consumer
 
 func (s *consumer) SetHandler(handler Handler) {
 	s.once.Do(func() {
-		s.startGetListMessage()
-		s.startGetDelayMessage()
+		s.processQueueMsg()
+		s.processDelayQueueMsg()
 	})
 	s.handler = handler
 }
 
-func (s *consumer) startGetListMessage() {
+func (s *consumer) processQueueMsg() {
 	go func() {
 		ticker := time.NewTicker(s.options.RateLimitPeriod)
 		defer func() {
-			log.Println("stop get list message.")
+			log.Info("TOPIC:%v stop process queue msg.", s.topicName)
 			ticker.Stop()
 		}()
 		topicName := s.topicName + listSuffix
 		for {
 			select {
 			case <-s.ctx.Done():
-				log.Printf("context Done msg: %#v \n", s.ctx.Err())
+				log.Info("TOPIC:%v context Done msg: %#v \n", s.topicName, s.ctx.Err())
 				return
 			case <-ticker.C:
-				var revBody []byte
-				var err error
-				if !s.options.UseBLPop {
-					revBody, err = s.redisCmd.LPop(topicName).Bytes()
-				} else {
-					revs := s.redisCmd.BLPop(time.Second, topicName)
-					err = revs.Err()
-					revValues := revs.Val()
-					if len(revValues) >= 2 {
-						revBody = []byte(revValues[1])
-					}
+				// first check handler
+				if s.handler == nil {
+					continue
 				}
+
+				revBody, err := s.redisCmd.LPop(topicName).Bytes()
+				// first check redis nil
 				if err == redis.Nil {
 					continue
 				}
 				if err != nil {
-					log.Printf("LPOP error: %#v \n", err)
+					log.Error("TOPIC:%v LPop error: %#v", s.topicName, err.Error())
 					continue
 				}
-
 				if len(revBody) == 0 {
 					continue
 				}
+
 				msg := &Message{}
-				json.Unmarshal(revBody, msg)
-				if s.handler != nil {
-					s.handler.HandleMessage(msg)
+				err = json.Unmarshal(revBody, msg)
+				if err != nil {
+					log.Error("TOPIC:%v unmarshal msg:[%v] err:%v", s.topicName, string(revBody), err.Error())
+					continue
 				}
+				handleMsg := func() {
+					log.Info("TOPIC:%v process msg:[%v]", s.topicName, msg)
+					err = s.handler.HandleMessage(msg)
+					if err != nil {
+						log.Error("TOPIC:%v process msgID:%v done with err:%v", s.topicName, msg.ID, err.Error())
+					}
+				}
+				go handleMsg()
 			}
 		}
 	}()
 }
 
-func (s *consumer) startGetDelayMessage() {
+func (s *consumer) processDelayQueueMsg() {
 	go func() {
 		ticker := time.NewTicker(s.options.RateLimitPeriod)
 		defer func() {
-			log.Println("stop get delay message.")
+			log.Info("TOPIC:%v stop process msg.", s.topicName)
 			ticker.Stop()
 		}()
 		topicName := s.topicName + zsetSuffix
 		for {
-			currentTime := time.Now().Unix()
+			currentTime := time.Now().UnixNano() / 1000 / 1000
 			select {
 			case <-s.ctx.Done():
-				log.Printf("context Done msg: %#v \n", s.ctx.Err())
+				log.Error("TOPIC:%v context Done msg: %#v", s.topicName, s.ctx.Err())
 				return
 			case <-ticker.C:
+				// first check handler
+				if s.handler == nil {
+					continue
+				}
+
 				var valuesCmd *redis.ZSliceCmd
 				_, err := s.redisCmd.TxPipelined(func(pip redis.Pipeliner) error {
-					valuesCmd = pip.ZRangeWithScores(topicName, 0, currentTime)
+					valuesCmd = pip.ZRangeByScoreWithScores(topicName,
+						&redis.ZRangeBy{
+							Min: "0",
+							Max: strconv.FormatInt(currentTime, 10),
+						})
 					pip.ZRemRangeByScore(topicName, "0", strconv.FormatInt(currentTime, 10))
 					return nil
 				})
 				if err != nil {
-					log.Printf("zset pip error: %#v \n", err)
+					log.Error("TOPIC:%v zset pip error: %#v", s.topicName, err.Error())
 					continue
 				}
+
 				rev := valuesCmd.Val()
 				for _, revBody := range rev {
 					msg := &Message{}
-					json.Unmarshal([]byte(revBody.Member.(string)), msg)
-					if s.handler != nil {
-						s.handler.HandleMessage(msg)
+					err := json.Unmarshal([]byte(revBody.Member.(string)), msg)
+					if err != nil {
+						log.Error("TOPIC:%v unmarshal msg:[%v] err:%v", s.topicName, revBody.Member.(string), err.Error())
+						continue
 					}
+
+					handleMsg := func() {
+						log.Info("TOPIC:%v process msg:%v", s.topicName, msg)
+						err = s.handler.HandleMessage(msg)
+						if err != nil {
+							log.Error("TOPIC:%v process msgID:%v done with err:%v", s.topicName, msg.ID, err.Error())
+						}
+					}
+					go handleMsg()
 				}
 			}
 		}
 	}()
 }
 
-func NewSimpleMQConsumer(ctx context.Context, redisCmd redis.Cmdable, topicName string, opts ...ConsumerOption) Consumer {
+func NewConsumer(ctx context.Context, redisCmd redis.Cmdable, topicName string, op ...ConsumerOptions) Consumer {
 	consumer := &consumer{
 		redisCmd:  redisCmd,
 		ctx:       ctx,
 		topicName: topicName,
 	}
-	for _, o := range opts {
-		o(&consumer.options)
-	}
 	if consumer.options.RateLimitPeriod == 0 {
-		consumer.options.RateLimitPeriod = time.Microsecond * 200
+		consumer.options.RateLimitPeriod = time.Millisecond * 200
+	}
+	if len(op) > 0 && op[0].RateLimitPeriod > 0 {
+		consumer.options.RateLimitPeriod = op[0].RateLimitPeriod
 	}
 	return consumer
 }
@@ -200,7 +215,13 @@ func (p *Producer) PublishDelayMsg(topicName string, body []byte, delay time.Dur
 	msg.DelayTime = tm.Unix()
 
 	sendData, _ := json.Marshal(msg)
-	return p.redisCmd.ZAdd(topicName+zsetSuffix, &redis.Z{Score: float64(tm.Unix()), Member: string(sendData)}).Err()
+	score := float64(tm.UnixNano() / 1000 / 1000)
+	return p.redisCmd.ZAdd(
+		topicName+zsetSuffix,
+		&redis.Z{
+			Score:  score,
+			Member: string(sendData)},
+	).Err()
 }
 
 func NewProducer(cmd redis.Cmdable) *Producer {
