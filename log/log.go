@@ -34,17 +34,19 @@ func Init(opts ...LogOption) error {
 			rootDir  = "./log"
 			filename = "app"
 			level    = "debug"
+			maxSize  = int64(1 << 26) // 1*2^26 = 64M
 		)
 		l := conf.Get("log")
 		if l != nil {
 			rootDir, _ = l.String("root", "./log")
 			filename, _ = l.String("name", "app")
 			level, _ = l.String("level")
+			maxSize, _ = l.Int("maxsize", 1<<26)
 		}
 		mfOpts, _ := json.Marshal(&LogOption{
 			Dir:      rootDir,
 			Filename: filename,
-			MaxSize:  1 << 28,
+			MaxSize:  int(maxSize),
 			Level:    level,
 		})
 		consoleOpts := fmt.Sprintf(`{"tostderrlevel":%s}`, level)
