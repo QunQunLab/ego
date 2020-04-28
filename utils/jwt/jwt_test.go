@@ -41,7 +41,6 @@ func TestTokenValidate(t *testing.T) {
 		Convey("TokenValidate should return mockInfo without error", func() {
 			parsedInfo, err := TokenValidate(token)
 			So(err, ShouldBeNil)
-			So(parsedInfo.Username, ShouldEqual, mockInfo.Username)
 			So(parsedInfo.Expires, ShouldNotEqual, mockInfo.Expires)
 		})
 	})
@@ -64,7 +63,6 @@ func TestTokenValidate(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(mockInfo, ShouldNotBeNil)
 			So(mockInfo1, ShouldNotBeNil)
-			So(mockInfo.Username, ShouldNotEqual, mockInfo1.Username)
 		})
 	})
 }

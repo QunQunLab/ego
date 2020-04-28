@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"github.com/mlaoji/ygo/lib"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -195,14 +194,6 @@ func (c *Controller) GetBool(key string, defaultValues ...bool) bool {
 	ret, err := strconv.ParseBool(c._getFormValue(key))
 	if err != nil {
 		ret = defaultValue
-	}
-	return ret
-}
-
-func (c *Controller) GetFromJson(key string) interface{} {
-	ret := c._getFormValue(key)
-	if ret != "" {
-		return lib.JsonDecode(ret)
 	}
 	return ret
 }
